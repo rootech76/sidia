@@ -84,6 +84,11 @@ $OSBuild = $OS.BuildNumber
 $OSArquitectura = $OS.OSArchitecture
 $EquipoNombre = $OS.CSName
 
+# 🔥 Versión comercial (25H2)
+$WinInfo = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+$OSRelease = if ($WinInfo.DisplayVersion) { $WinInfo.DisplayVersion } else { $WinInfo.ReleaseId }
+
+# Uptime
 try {
     if ($OS.LastBootUpTime -match "^\d{14}") {
         $LastBoot = [System.Management.ManagementDateTimeConverter]::ToDateTime($OS.LastBootUpTime)
@@ -214,6 +219,7 @@ do {
             Write-Host ("{0,-20}: {1}" -f "Nombre", $OSNombre)
             Write-Host ("{0,-20}: {1}" -f "Versión", $OSVersion)
             Write-Host ("{0,-20}: {1}" -f "Build", $OSBuild)
+            Write-Host ("{0,-20}: {1}" -f "Versión Comercial", $OSRelease)
             Write-Host ("{0,-20}: {1}" -f "Arquitectura", $OSArquitectura)
             Write-Host ("{0,-20}: {1}" -f "Equipo", $EquipoNombre)
             Write-Host ("{0,-20}: {1}" -f "Tiempo encendido", $UptimeTexto)
