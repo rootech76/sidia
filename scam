@@ -1,0 +1,240 @@
+# ================== BASE ==================
+$BaseBoard = Get-CimInstance Win32_BaseBoard
+$BIOS = Get-CimInstance Win32_BIOS
+$ComputerSystem = Get-CimInstance Win32_ComputerSystem
+
+$CPU = Get-CimInstance Win32_Processor
+$OS = Get-CimInstance Win32_OperatingSystem
+$RAM = Get-CimInstance Win32_PhysicalMemory
+$GPU = Get-CimInstance Win32_VideoController
+
+# 💾 DISCO
+$DiskDrives = Get-CimInstance Win32_DiskDrive
+try {
+    $PhysicalDisks = Get-PhysicalDisk
+} catch {
+    $PhysicalDisks = $null
+}
+
+# 🌐 RED
+$Net = Get-CimInstance Win32_NetworkAdapterConfiguration | 
+Where-Object { $_.IPEnabled -and $_.Description -notmatch "Virtual|VMware|Hyper-V|Loopback" }
+
+$NetAdapters = Get-CimInstance Win32_NetworkAdapter
+
+# ================== PLACA MAE ==================
+$FabPlacaMae   = $BaseBoard.Manufacturer
+$ModeloPlacaMae= $BaseBoard.Product
+$VersionPlaca  = $BaseBoard.Version
+$SerialPlaca   = $BaseBoard.SerialNumber
+
+# ================== SISTEMA (HARDWARE) ==================
+$FabricanteSistema = $ComputerSystem.Manufacturer
+$ModeloSistema     = $ComputerSystem.Model
+
+# ================== BIOS ==================
+$FabricanteBIOS = $BIOS.Manufacturer
+$VersionBIOS    = $BIOS.SMBIOSBIOSVersion
+
+if ($BIOS.ReleaseDate -and $BIOS.ReleaseDate -match "^\d{14}") {
+    try {
+        $FechaBIOS = [System.Management.ManagementDateTimeConverter]::ToDateTime($BIOS.ReleaseDate).ToString("dd/MM/yyyy")
+    } catch {
+        $FechaBIOS = "Formato inválido"
+    }
+} else {
+    $FechaBIOS = "No disponible"
+}
+
+# ================== CPU ==================
+$NombreCPU = $CPU.Name
+$ModeloCPU = if ($NombreCPU -match "(i\d-\d+\w*)") { $Matches[0] } else { $NombreCPU }
+$FabCPU = if ($CPU.Manufacturer -match "Intel") { "Intel" } else { $CPU.Manufacturer }
+
+$Nucleos = $CPU.NumberOfCores
+$Hilos = $CPU.NumberOfLogicalProcessors
+$VelCPU = $CPU.MaxClockSpeed
+$ArquitecturaCPU = if ($CPU.Architecture -eq 0) { "32 Bits" } else { "64 Bits" }
+
+# ================== RAM ==================
+$TotalRAM = [math]::Round($OS.TotalVisibleMemorySize / 1MB, 2)
+$CantModulosRAM = $RAM.Count
+
+$TipoRAM = $RAM | ForEach-Object {
+    $tipo = $_.SMBIOSMemoryType
+    if (-not $tipo -or $tipo -eq 0) { $tipo = $_.MemoryType }
+
+    switch ($tipo) {
+        20 {"DDR"}
+        21 {"DDR2"}
+        24 {"DDR3"}
+        26 {"DDR4"}
+        34 {"DDR5"}
+        default {"Desconocido"}
+    }
+} | Select-Object -Unique
+
+$VelRAM = ($RAM.Speed | Select-Object -Unique) -join ", "
+$CapModulos = ($RAM | ForEach-Object { "$([math]::Round($_.Capacity / 1GB,0)) GB" }) -join " | "
+
+# ================== SISTEMA OPERATIVO ==================
+$OSNombre = $OS.Caption
+$OSVersion = $OS.Version
+$OSBuild = $OS.BuildNumber
+$OSArquitectura = $OS.OSArchitecture
+$EquipoNombre = $OS.CSName
+
+try {
+    if ($OS.LastBootUpTime -match "^\d{14}") {
+        $LastBoot = [System.Management.ManagementDateTimeConverter]::ToDateTime($OS.LastBootUpTime)
+        $Uptime = (Get-Date) - $LastBoot
+        $UptimeTexto = "$($Uptime.Days) días, $($Uptime.Hours) horas"
+    } else {
+        $UptimeTexto = "No disponible"
+    }
+} catch {
+    $UptimeTexto = "No disponible"
+}
+
+# ================== MENU ==================
+do {
+    Clear-Host
+
+    Write-Host "╔══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+    Write-Host "║                      SIDIA                           ║" -ForegroundColor Cyan
+    Write-Host "║                     By RooTech                       ║" -ForegroundColor DarkGray
+    Write-Host "╚══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+
+    Write-Host "`n1 - Informação do Dispositivo"
+    Write-Host "2 - Diagnostico de Rendimento"
+    Write-Host "3 - Full"
+    Write-Host "4 - Sair"
+
+    $resp = Read-Host "`nEscolha uma Opção"
+
+    switch ($resp) {
+
+        "1" {
+            Clear-Host
+
+            # ================== HARDWARE ==================
+            Write-Host "╔══════════════════════════════════════════════════════╗" -ForegroundColor Yellow
+            Write-Host "║                    🖥️ HARDWARE                       ║" -ForegroundColor Yellow
+            Write-Host "╚══════════════════════════════════════════════════════╝" -ForegroundColor Yellow
+
+            Write-Host "`n🔧 Placa Mae" -ForegroundColor Green
+            Write-Host ("{0,-20}: {1}" -f "Fabricante", $FabPlacaMae)
+            Write-Host ("{0,-20}: {1}" -f "Modelo", $ModeloPlacaMae)
+            Write-Host ("{0,-20}: {1}" -f "Versión", $VersionPlaca)
+            Write-Host ("{0,-20}: {1}" -f "Serial", $SerialPlaca)
+
+            Write-Host "`n🏷️ Equipo" -ForegroundColor Green
+            Write-Host ("{0,-20}: {1}" -f "Fabricante", $FabricanteSistema)
+            Write-Host ("{0,-20}: {1}" -f "Modelo", $ModeloSistema)
+
+            Write-Host "`n🔌 BIOS" -ForegroundColor Green
+            Write-Host ("{0,-20}: {1}" -f "Fabricante", $FabricanteBIOS)
+            Write-Host ("{0,-20}: {1}" -f "Versión", $VersionBIOS)
+            Write-Host ("{0,-20}: {1}" -f "Fecha", $FechaBIOS)
+
+            Write-Host "`n⚙️ CPU" -ForegroundColor Green
+            Write-Host ("{0,-20}: {1}" -f "Modelo", $ModeloCPU)
+            Write-Host ("{0,-20}: {1}" -f "Nombre completo", $NombreCPU)
+            Write-Host ("{0,-20}: {1}" -f "Fabricante", $FabCPU)
+            Write-Host ("{0,-20}: {1}" -f "Núcleos", $Nucleos)
+            Write-Host ("{0,-20}: {1}" -f "Hilos", $Hilos)
+            Write-Host ("{0,-20}: {1} MHz" -f "Velocidad", $VelCPU)
+            Write-Host ("{0,-20}: {1}" -f "Arquitectura", $ArquitecturaCPU)
+
+            Write-Host "`n🧠 RAM" -ForegroundColor Green
+            Write-Host ("{0,-20}: {1} GB" -f "Total Instalado", $TotalRAM)
+            Write-Host ("{0,-20}: {1}" -f "Tipo", ($TipoRAM -join ", "))
+            Write-Host ("{0,-20}: {1} MHz" -f "Velocidad", $VelRAM)
+            Write-Host ("{0,-20}: {1}" -f "Módulos", $CantModulosRAM)
+            Write-Host ("{0,-20}: {1}" -f "Capacidad", $CapModulos)
+
+            Write-Host "`n💾 DISCOS" -ForegroundColor Green
+            foreach ($disk in $DiskDrives) {
+                $size = [math]::Round($disk.Size / 1GB, 2)
+                $tipo = "Desconocido"
+
+                if ($PhysicalDisks) {
+                    $match = $PhysicalDisks | Where-Object { $disk.Model -like "*$($_.FriendlyName)*" }
+                    if ($match) { $tipo = $match.MediaType }
+                }
+
+                if ($tipo -eq "Desconocido") {
+                    if ($disk.Model -match "SSD|NVMe") { $tipo = "SSD" } else { $tipo = "HDD" }
+                }
+
+                Write-Host ("{0,-20}: {1}" -f "Disco", $disk.Model)
+                Write-Host ("{0,-20}: {1}" -f "Tipo", $tipo)
+                Write-Host ("{0,-20}: {1}" -f "Interfaz", $disk.InterfaceType)
+                Write-Host ("{0,-20}: {1} GB" -f "Tamaño", $size)
+                Write-Host ("{0,-20}: {1}" -f "Serial", $disk.SerialNumber)
+                Write-Host ""
+            }
+
+            Write-Host "`n🎮 GRAFICA" -ForegroundColor Green
+            foreach ($g in $GPU) {
+                Write-Host ("{0,-20}: {1}" -f "Nombre", $g.Name)
+                Write-Host ("{0,-20}: {1} MB" -f "VRAM", [math]::Round($g.AdapterRAM / 1MB))
+            }
+
+            Write-Host "`n🌐 RED" -ForegroundColor Green
+            foreach ($n in $Net) {
+                $tipo = if ($n.Description -match "Wireless|Wi-Fi") { "WiFi" } else { "Ethernet" }
+                $estado = ($NetAdapters | Where-Object { $_.MACAddress -eq $n.MACAddress }).NetConnectionStatus
+
+                $estadoTexto = switch ($estado) {
+                    2 {"Conectado"}
+                    7 {"Desconectado"}
+                    default {"Desconocido"}
+                }
+
+                $IPv4 = $n.IPAddress | Where-Object { $_ -match "^\d+\." }
+                $Gateway = $n.DefaultIPGateway | Where-Object { $_ -match "^\d+\." }
+
+                Write-Host ("{0,-20}: {1}" -f "Adaptador", $n.Description)
+                Write-Host ("{0,-20}: {1}" -f "Tipo", $tipo)
+                Write-Host ("{0,-20}: {1}" -f "Estado", $estadoTexto)
+                Write-Host ("{0,-20}: {1}" -f "MAC", $n.MACAddress)
+                Write-Host ("{0,-20}: {1}" -f "IP", ($IPv4 -join ", "))
+                Write-Host ("{0,-20}: {1}" -f "Gateway", ($Gateway -join ", "))
+                Write-Host ("{0,-20}: {1}" -f "DNS", ($n.DNSServerSearchOrder -join ", "))
+                Write-Host ("{0,-20}: {1}" -f "DHCP", ($(if ($n.DHCPEnabled) {"Activado"} else {"Manual"})))
+                Write-Host ""
+            }
+
+            # ================== SISTEMA ==================
+            Write-Host "`n╔══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+            Write-Host "║                🖥️ SISTEMA OPERATIVO                  ║" -ForegroundColor Cyan
+            Write-Host "╚══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+
+            Write-Host ("{0,-20}: {1}" -f "Nombre", $OSNombre)
+            Write-Host ("{0,-20}: {1}" -f "Versión", $OSVersion)
+            Write-Host ("{0,-20}: {1}" -f "Build", $OSBuild)
+            Write-Host ("{0,-20}: {1}" -f "Arquitectura", $OSArquitectura)
+            Write-Host ("{0,-20}: {1}" -f "Equipo", $EquipoNombre)
+            Write-Host ("{0,-20}: {1}" -f "Tiempo encendido", $UptimeTexto)
+
+            Write-Host "────────────────────────────────────────"
+            Read-Host "`nPressione ENTER para voltar..."
+        }
+
+        "2" {
+            Write-Host "`n⚡ Sección de rendimiento en desarrollo..."
+            Read-Host "ENTER..."
+        }
+
+        "3" {
+            Write-Host "`n🚀 Modo FULL en construcción..."
+            Read-Host "ENTER..."
+        }
+
+        "4" {
+            Write-Host "`nSaindo..."
+        }
+    }
+
+} while ($resp -ne "4")
