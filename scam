@@ -26,93 +26,27 @@ Where-Object {
 
 $NetAdapters = Get-CimInstance Win32_NetworkAdapter
 
-# ================== PLACA MAE ==================
-$FabPlacaMae   = $BaseBoard.Manufacturer
-$ModeloPlacaMae= $BaseBoard.Product
-$VersionPlaca  = $BaseBoard.Version
-$SerialPlaca   = $BaseBoard.SerialNumber
-
-# ================== SISTEMA ==================
-$FabricanteSistema = $ComputerSystem.Manufacturer
-$ModeloSistema     = $ComputerSystem.Model
-
-# ================== BIOS ==================
-$FabricanteBIOS = $BIOS.Manufacturer
-$VersionBIOS    = $BIOS.SMBIOSBIOSVersion
-
-if ($BIOS.ReleaseDate -and $BIOS.ReleaseDate -match "^\d{14}") {
-    try {
-        $FechaBIOS = [System.Management.ManagementDateTimeConverter]::ToDateTime($BIOS.ReleaseDate).ToString("dd/MM/yyyy")
-    } catch {
-        $FechaBIOS = "Formato inválido"
-    }
-} else {
-    $FechaBIOS = "No disponible"
-}
-
 # ================== CPU ==================
 $NombreCPU = $CPU.Name
 $ModeloCPU = if ($NombreCPU -match "(i\d-\d+\w*)") { $Matches[0] } else { $NombreCPU }
-
-$FabCPU = if ($CPU.Manufacturer -match "Intel") { "Intel" } else { $CPU.Manufacturer }
 
 $ArquitecturaCPU = switch ($CPU.Architecture) {
     0 {"x86"}
     9 {"x64"}
     5 {"ARM"}
-    default {"Desconocido"}
+    default {"Desconhecido"}
 }
-
-$Nucleos = $CPU.NumberOfCores
-$Hilos = $CPU.NumberOfLogicalProcessors
-$VelCPU = $CPU.MaxClockSpeed
 
 # ================== RAM ==================
 $TotalRAM = [math]::Round($OS.TotalVisibleMemorySize / 1KB / 1024, 2)
-$CantModulosRAM = $RAM.Count
-
-$TipoRAM = $RAM | ForEach-Object {
-    $tipo = $_.SMBIOSMemoryType
-    if (-not $tipo -or $tipo -eq 0) { $tipo = $_.MemoryType }
-
-    switch ($tipo) {
-        20 {"DDR"}
-        21 {"DDR2"}
-        24 {"DDR3"}
-        26 {"DDR4"}
-        34 {"DDR5"}
-        default {"Desconocido"}
-    }
-} | Select-Object -Unique
-
-$VelRAM = ($RAM.Speed | Select-Object -Unique) -join ", "
-$CapModulos = ($RAM | ForEach-Object { "$([math]::Round($_.Capacity / 1GB,0)) GB" }) -join " | "
-
-# ================== SISTEMA OPERATIVO ==================
-$OSNombre = $OS.Caption
-$OSVersion = $OS.Version
-$OSBuild = $OS.BuildNumber
-$OSArquitectura = $OS.OSArchitecture
-$EquipoNombre = $OS.CSName
-
-$WinInfo = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
-$OSRelease = if ($WinInfo.DisplayVersion) { $WinInfo.DisplayVersion } else { $WinInfo.ReleaseId }
-
-try {
-    $LastBoot = [System.Management.ManagementDateTimeConverter]::ToDateTime($OS.LastBootUpTime)
-    $Uptime = (Get-Date) - $LastBoot
-    $UptimeTexto = "$($Uptime.Days) días, $($Uptime.Hours) horas"
-} catch {
-    $UptimeTexto = "No disponible"
-}
 
 # ================== FUNCIONES ==================
 function Get-Estado {
     param($valor)
 
     if ($valor -gt 85) { return "ALTO" }
-    elseif ($valor -gt 60) { return "MEDIO" }
-    else { return "BAJO" }
+    elseif ($valor -gt 60) { return "MÉDIO" }
+    else { return "BAIXO" }
 }
 
 # ================== MENU ==================
@@ -125,9 +59,8 @@ do {
     Write-Host "╚══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
 
     Write-Host "`n1 - Informação do Dispositivo"
-    Write-Host "2 - Diagnostico de Rendimento"
-    Write-Host "3 - Full"
-    Write-Host "4 - Sair"
+    Write-Host "2 - Diagnóstico de Desempenho"
+    Write-Host "3 - Sair"
 
     $resp = Read-Host "`nEscolha uma Opção"
 
@@ -136,9 +69,8 @@ do {
         "1" {
             Clear-Host
 
-            Write-Host "`n🧠 RAM Total: $TotalRAM GB"
-            Write-Host "🖥 CPU: $ModeloCPU ($ArquitecturaCPU)"
-            Write-Host "⏱ Uptime: $UptimeTexto"
+            Write-Host "`n🖥 CPU: $ModeloCPU ($ArquitecturaCPU)"
+            Write-Host "🧠 RAM Total: $TotalRAM GB"
 
             Read-Host "`nENTER para voltar"
         }
@@ -147,7 +79,7 @@ do {
             Clear-Host
             Write-Host "⚡ Diagnóstico de desempenho" -ForegroundColor Yellow
 
-            $minutos = Read-Host "`n⏱ Minutos de prueba"
+            $minutos = Read-Host "`n⏱ Minutos de teste"
 
             if (-not [int]::TryParse($minutos, [ref]$null) -or $minutos -le 0) {
                 Write-Host "❌ Valor inválido → usando 5 min"
@@ -168,10 +100,11 @@ do {
 
             for ($i = 1; $i -le $amostras; $i++) {
 
-                $cpu = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
-                $ramUso = (Get-Counter '\Memory\% Committed Bytes In Use').CounterSamples.CookedValue
-                $disco = (Get-Counter '\PhysicalDisk(_Total)\% Disk Time').CounterSamples.CookedValue
-                $rede = (Get-Counter '\Network Interface(*)\Bytes Total/sec').CounterSamples |
+                # 🔥 CONTADORES EN PORTUGUÉS (pt-BR)
+                $cpu = (Get-Counter '\Processador(_Total)\% Tempo de Processador').CounterSamples.CookedValue
+                $ramUso = (Get-Counter '\Memória\% Bytes Confirmados em Uso').CounterSamples.CookedValue
+                $disco = (Get-Counter '\Disco Físico(_Total)\% Tempo de Disco').CounterSamples.CookedValue
+                $rede = (Get-Counter '\Interface de Rede(*)\Total de Bytes/s').CounterSamples |
                         Measure-Object CookedValue -Sum | Select-Object -ExpandProperty Sum
 
                 $cpuTotal += $cpu
@@ -179,7 +112,7 @@ do {
                 $discoTotal += $disco
                 $redeTotal += $rede
 
-                Write-Progress -Activity "Monitorizando..." `
+                Write-Progress -Activity "Monitorando..." `
                 -Status "CPU: $([math]::Round($cpu,1))% | RAM: $([math]::Round($ramUso,1))%" `
                 -PercentComplete (($i / $amostras) * 100)
 
@@ -199,31 +132,12 @@ do {
             Write-Host "DISCO: $discoMedia % ($(Get-Estado $discoMedia))"
             Write-Host "REDE : $redeMedia Bytes/s"
 
-            # Exportar
-            $resultado = [PSCustomObject]@{
-                CPU = $cpuMedia
-                RAM = $ramMedia
-                Disco = $discoMedia
-                Rede = $redeMedia
-                Fecha = Get-Date
-            }
-
-            $ruta = "$env:USERPROFILE\Desktop\diagnostico.csv"
-            $resultado | Export-Csv $ruta -NoTypeInformation
-
-            Write-Host "`n📁 Exportado en: $ruta"
-
             Read-Host "`nENTER..."
         }
 
         "3" {
-            Write-Host "🚀 Modo FULL próximamente..."
-            Read-Host "ENTER..."
-        }
-
-        "4" {
             Write-Host "Saindo..."
         }
     }
 
-} while ($resp -ne "4")
+} while ($resp -ne "3")
