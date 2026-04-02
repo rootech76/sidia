@@ -103,7 +103,7 @@ do {
                 # 🔥 CONTADORES EN PORTUGUÉS (pt-BR)
                 $cpu = (Get-Counter '\Processador(_Total)\% Tempo de Processador').CounterSamples.CookedValue
                 $ramUso = (Get-Counter '\Memória\% Bytes Confirmados em Uso').CounterSamples.CookedValue
-                $disco = (Get-Counter '\Disco Físico(_Total)\% Tempo de Disco').CounterSamples.CookedValue
+                $disco = (Get-Counter '\PhysicalDisk(_Total)\% Tempo de Disco').CounterSamples.CookedValue
                 $rede = (Get-Counter '\Interface de Rede(*)\Total de Bytes/s').CounterSamples |
                         Measure-Object CookedValue -Sum | Select-Object -ExpandProperty Sum
 
