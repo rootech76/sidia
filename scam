@@ -18,7 +18,11 @@ try {
 
 # 🌐 RED
 $Net = Get-CimInstance Win32_NetworkAdapterConfiguration | 
-Where-Object { $_.IPEnabled -and $_.Description -notmatch "Virtual|VMware|Hyper-V|Loopback" }
+Where-Object {
+    $_.IPEnabled -and
+    $_.MACAddress -and
+    $_.Description -notmatch "Virtual|VMware|Hyper-V|Loopback|Teredo"
+}
 
 $NetAdapters = Get-CimInstance Win32_NetworkAdapter
 
@@ -28,7 +32,7 @@ $ModeloPlacaMae= $BaseBoard.Product
 $VersionPlaca  = $BaseBoard.Version
 $SerialPlaca   = $BaseBoard.SerialNumber
 
-# ================== SISTEMA (HARDWARE) ==================
+# ================== SISTEMA ==================
 $FabricanteSistema = $ComputerSystem.Manufacturer
 $ModeloSistema     = $ComputerSystem.Model
 
@@ -49,15 +53,22 @@ if ($BIOS.ReleaseDate -and $BIOS.ReleaseDate -match "^\d{14}") {
 # ================== CPU ==================
 $NombreCPU = $CPU.Name
 $ModeloCPU = if ($NombreCPU -match "(i\d-\d+\w*)") { $Matches[0] } else { $NombreCPU }
+
 $FabCPU = if ($CPU.Manufacturer -match "Intel") { "Intel" } else { $CPU.Manufacturer }
+
+$ArquitecturaCPU = switch ($CPU.Architecture) {
+    0 {"x86"}
+    9 {"x64"}
+    5 {"ARM"}
+    default {"Desconocido"}
+}
 
 $Nucleos = $CPU.NumberOfCores
 $Hilos = $CPU.NumberOfLogicalProcessors
 $VelCPU = $CPU.MaxClockSpeed
-$ArquitecturaCPU = if ($CPU.Architecture -eq 0) { "32 Bits" } else { "64 Bits" }
 
 # ================== RAM ==================
-$TotalRAM = [math]::Round($OS.TotalVisibleMemorySize / 1MB, 2)
+$TotalRAM = [math]::Round($OS.TotalVisibleMemorySize / 1KB / 1024, 2)
 $CantModulosRAM = $RAM.Count
 
 $TipoRAM = $RAM | ForEach-Object {
@@ -84,21 +95,24 @@ $OSBuild = $OS.BuildNumber
 $OSArquitectura = $OS.OSArchitecture
 $EquipoNombre = $OS.CSName
 
-# 🔥 Versión comercial (25H2)
 $WinInfo = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
 $OSRelease = if ($WinInfo.DisplayVersion) { $WinInfo.DisplayVersion } else { $WinInfo.ReleaseId }
 
-# Uptime
 try {
-    if ($OS.LastBootUpTime -match "^\d{14}") {
-        $LastBoot = [System.Management.ManagementDateTimeConverter]::ToDateTime($OS.LastBootUpTime)
-        $Uptime = (Get-Date) - $LastBoot
-        $UptimeTexto = "$($Uptime.Days) días, $($Uptime.Hours) horas"
-    } else {
-        $UptimeTexto = "No disponible"
-    }
+    $LastBoot = [System.Management.ManagementDateTimeConverter]::ToDateTime($OS.LastBootUpTime)
+    $Uptime = (Get-Date) - $LastBoot
+    $UptimeTexto = "$($Uptime.Days) días, $($Uptime.Hours) horas"
 } catch {
     $UptimeTexto = "No disponible"
+}
+
+# ================== FUNCIONES ==================
+function Get-Estado {
+    param($valor)
+
+    if ($valor -gt 85) { return "ALTO" }
+    elseif ($valor -gt 60) { return "MEDIO" }
+    else { return "BAJO" }
 }
 
 # ================== MENU ==================
@@ -122,219 +136,93 @@ do {
         "1" {
             Clear-Host
 
-            # ================== HARDWARE ==================
-            Write-Host "╔══════════════════════════════════════════════════════╗" -ForegroundColor Yellow
-            Write-Host "║                    🖥️ HARDWARE                       ║" -ForegroundColor Yellow
-            Write-Host "╚══════════════════════════════════════════════════════╝" -ForegroundColor Yellow
+            Write-Host "`n🧠 RAM Total: $TotalRAM GB"
+            Write-Host "🖥 CPU: $ModeloCPU ($ArquitecturaCPU)"
+            Write-Host "⏱ Uptime: $UptimeTexto"
 
-            Write-Host "`n🔧 Placa Mae" -ForegroundColor Green
-            Write-Host ("{0,-20}: {1}" -f "Fabricante", $FabPlacaMae)
-            Write-Host ("{0,-20}: {1}" -f "Modelo", $ModeloPlacaMae)
-            Write-Host ("{0,-20}: {1}" -f "Versión", $VersionPlaca)
-            Write-Host ("{0,-20}: {1}" -f "Serial", $SerialPlaca)
-
-            Write-Host "`n🏷️ Equipo" -ForegroundColor Green
-            Write-Host ("{0,-20}: {1}" -f "Fabricante", $FabricanteSistema)
-            Write-Host ("{0,-20}: {1}" -f "Modelo", $ModeloSistema)
-
-            Write-Host "`n🔌 BIOS" -ForegroundColor Green
-            Write-Host ("{0,-20}: {1}" -f "Fabricante", $FabricanteBIOS)
-            Write-Host ("{0,-20}: {1}" -f "Versión", $VersionBIOS)
-            Write-Host ("{0,-20}: {1}" -f "Fecha", $FechaBIOS)
-
-            Write-Host "`n⚙️ CPU" -ForegroundColor Green
-            Write-Host ("{0,-20}: {1}" -f "Modelo", $ModeloCPU)
-            Write-Host ("{0,-20}: {1}" -f "Nombre completo", $NombreCPU)
-            Write-Host ("{0,-20}: {1}" -f "Fabricante", $FabCPU)
-            Write-Host ("{0,-20}: {1}" -f "Núcleos", $Nucleos)
-            Write-Host ("{0,-20}: {1}" -f "Hilos", $Hilos)
-            Write-Host ("{0,-20}: {1} MHz" -f "Velocidad", $VelCPU)
-            Write-Host ("{0,-20}: {1}" -f "Arquitectura", $ArquitecturaCPU)
-
-            Write-Host "`n🧠 RAM" -ForegroundColor Green
-            Write-Host ("{0,-20}: {1} GB" -f "Total Instalado", $TotalRAM)
-            Write-Host ("{0,-20}: {1}" -f "Tipo", ($TipoRAM -join ", "))
-            Write-Host ("{0,-20}: {1} MHz" -f "Velocidad", $VelRAM)
-            Write-Host ("{0,-20}: {1}" -f "Módulos", $CantModulosRAM)
-            Write-Host ("{0,-20}: {1}" -f "Capacidad", $CapModulos)
-
-            Write-Host "`n💾 DISCOS" -ForegroundColor Green
-            foreach ($disk in $DiskDrives) {
-                $size = [math]::Round($disk.Size / 1GB, 2)
-                $tipo = "Desconocido"
-
-                if ($PhysicalDisks) {
-                    $match = $PhysicalDisks | Where-Object { $disk.Model -like "*$($_.FriendlyName)*" }
-                    if ($match) { $tipo = $match.MediaType }
-                }
-
-                if ($tipo -eq "Desconocido") {
-                    if ($disk.Model -match "SSD|NVMe") { $tipo = "SSD" } else { $tipo = "HDD" }
-                }
-
-                Write-Host ("{0,-20}: {1}" -f "Disco", $disk.Model)
-                Write-Host ("{0,-20}: {1}" -f "Tipo", $tipo)
-                Write-Host ("{0,-20}: {1}" -f "Interfaz", $disk.InterfaceType)
-                Write-Host ("{0,-20}: {1} GB" -f "Tamaño", $size)
-                Write-Host ("{0,-20}: {1}" -f "Serial", $disk.SerialNumber)
-                Write-Host ""
-            }
-
-            Write-Host "`n🎮 GRAFICA" -ForegroundColor Green
-            foreach ($g in $GPU) {
-                Write-Host ("{0,-20}: {1}" -f "Nombre", $g.Name)
-                Write-Host ("{0,-20}: {1} MB" -f "VRAM", [math]::Round($g.AdapterRAM / 1MB))
-            }
-
-            Write-Host "`n🌐 RED" -ForegroundColor Green
-            foreach ($n in $Net) {
-                $tipo = if ($n.Description -match "Wireless|Wi-Fi") { "WiFi" } else { "Ethernet" }
-                $estado = ($NetAdapters | Where-Object { $_.MACAddress -eq $n.MACAddress }).NetConnectionStatus
-
-                $estadoTexto = switch ($estado) {
-                    2 {"Conectado"}
-                    7 {"Desconectado"}
-                    default {"Desconocido"}
-                }
-
-                $IPv4 = $n.IPAddress | Where-Object { $_ -match "^\d+\." }
-                $Gateway = $n.DefaultIPGateway | Where-Object { $_ -match "^\d+\." }
-
-                Write-Host ("{0,-20}: {1}" -f "Adaptador", $n.Description)
-                Write-Host ("{0,-20}: {1}" -f "Tipo", $tipo)
-                Write-Host ("{0,-20}: {1}" -f "Estado", $estadoTexto)
-                Write-Host ("{0,-20}: {1}" -f "MAC", $n.MACAddress)
-                Write-Host ("{0,-20}: {1}" -f "IP", ($IPv4 -join ", "))
-                Write-Host ("{0,-20}: {1}" -f "Gateway", ($Gateway -join ", "))
-                Write-Host ("{0,-20}: {1}" -f "DNS", ($n.DNSServerSearchOrder -join ", "))
-                Write-Host ("{0,-20}: {1}" -f "DHCP", ($(if ($n.DHCPEnabled) {"Activado"} else {"Manual"})))
-                Write-Host ""
-            }
-
-            # ================== SISTEMA ==================
-            Write-Host "`n╔══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-            Write-Host "║                🖥️ SISTEMA OPERATIVO                  ║" -ForegroundColor Cyan
-            Write-Host "╚══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
-
-            Write-Host ("{0,-20}: {1}" -f "Nombre", $OSNombre)
-            Write-Host ("{0,-20}: {1}" -f "Versión", $OSVersion)
-            Write-Host ("{0,-20}: {1}" -f "Build", $OSBuild)
-            Write-Host ("{0,-20}: {1}" -f "Versión Comercial", $OSRelease)
-            Write-Host ("{0,-20}: {1}" -f "Arquitectura", $OSArquitectura)
-            Write-Host ("{0,-20}: {1}" -f "Equipo", $EquipoNombre)
-            Write-Host ("{0,-20}: {1}" -f "Tiempo encendido", $UptimeTexto)
-
-            Write-Host "────────────────────────────────────────"
-            Read-Host "`nPressione ENTER para voltar..."
+            Read-Host "`nENTER para voltar"
         }
 
-	   "2" {
-    Clear-Host
-    Write-Host "⚡ Diagnóstico de desempenho personalizado" -ForegroundColor Yellow
+        "2" {
+            Clear-Host
+            Write-Host "⚡ Diagnóstico de desempenho" -ForegroundColor Yellow
 
-    # 🔹 Preguntar duración en minutos
-    $minutos = Read-Host "`n⏱ ¿Cuántos minutos deseas ejecutar la prueba?"
-    
-    # Validar entrada
-    if (-not ($minutos -as [int]) -or $minutos -le 0) {
-        Write-Host "❌ Valor inválido. Se usarán 5 minutos por defecto." -ForegroundColor Red
-        $minutos = 5
-    }
+            $minutos = Read-Host "`n⏱ Minutos de prueba"
 
-    $duracao = $minutos * 60
-    $intervalo = 1
-    $amostras = $duracao / $intervalo
+            if (-not [int]::TryParse($minutos, [ref]$null) -or $minutos -le 0) {
+                Write-Host "❌ Valor inválido → usando 5 min"
+                $minutos = 5
+            }
 
-    Write-Host "`n👉 Execute seu programa de estresse AGORA..." -ForegroundColor Cyan
-    Start-Sleep 5
+            $duracao = $minutos * 60
+            $intervalo = 1
+            $amostras = $duracao / $intervalo
 
-    # 🔹 Mensaje de inicio real
-    Write-Host "`n🚀 Iniciando monitoreo de rendimiento..." -ForegroundColor Green
-    Start-Sleep 2
+            Write-Host "`n🚀 Iniciando..."
+            Start-Sleep 3
 
-    # Control de tiempo
-    $tempoRestante = $duracao
-    $ultimoAvisoMinuto = $minutos
+            $cpuTotal = 0
+            $ramTotal = 0
+            $discoTotal = 0
+            $redeTotal = 0
 
-    # Acumuladores
-    $cpuTotal = 0
-    $ramTotalUso = 0
-    $discoTotal = 0
-    $redeTotalGlobal = 0
+            for ($i = 1; $i -le $amostras; $i++) {
 
-    for ($i = 1; $i -le $amostras; $i++) {
+                $cpu = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
+                $ramUso = (Get-Counter '\Memory\% Committed Bytes In Use').CounterSamples.CookedValue
+                $disco = (Get-Counter '\PhysicalDisk(_Total)\% Disk Time').CounterSamples.CookedValue
+                $rede = (Get-Counter '\Network Interface(*)\Bytes Total/sec').CounterSamples |
+                        Measure-Object CookedValue -Sum | Select-Object -ExpandProperty Sum
 
-        # 🔹 Aviso cada minuto
-        $minutosRestantes = [math]::Ceiling($tempoRestante / 60)
+                $cpuTotal += $cpu
+                $ramTotal += $ramUso
+                $discoTotal += $disco
+                $redeTotal += $rede
 
-        if ($minutosRestantes -lt $ultimoAvisoMinuto -and $minutosRestantes -gt 0) {
-            Write-Host "⏳ Falta(n) $minutosRestantes minuto(s)..." -ForegroundColor Yellow
-            $ultimoAvisoMinuto = $minutosRestantes
+                Write-Progress -Activity "Monitorizando..." `
+                -Status "CPU: $([math]::Round($cpu,1))% | RAM: $([math]::Round($ramUso,1))%" `
+                -PercentComplete (($i / $amostras) * 100)
+
+                Start-Sleep $intervalo
+            }
+
+            $cpuMedia = [math]::Round($cpuTotal / $amostras, 2)
+            $ramMedia = [math]::Round($ramTotal / $amostras, 2)
+            $discoMedia = [math]::Round($discoTotal / $amostras, 2)
+            $redeMedia = [math]::Round($redeTotal / $amostras, 2)
+
+            Clear-Host
+            Write-Host "📊 RESULTADO FINAL" -ForegroundColor Cyan
+
+            Write-Host "CPU  : $cpuMedia % ($(Get-Estado $cpuMedia))"
+            Write-Host "RAM  : $ramMedia % ($(Get-Estado $ramMedia))"
+            Write-Host "DISCO: $discoMedia % ($(Get-Estado $discoMedia))"
+            Write-Host "REDE : $redeMedia Bytes/s"
+
+            # Exportar
+            $resultado = [PSCustomObject]@{
+                CPU = $cpuMedia
+                RAM = $ramMedia
+                Disco = $discoMedia
+                Rede = $redeMedia
+                Fecha = Get-Date
+            }
+
+            $ruta = "$env:USERPROFILE\Desktop\diagnostico.csv"
+            $resultado | Export-Csv $ruta -NoTypeInformation
+
+            Write-Host "`n📁 Exportado en: $ruta"
+
+            Read-Host "`nENTER..."
         }
 
-        $cpu = (Get-Counter '\Processador(_Total)\% Tempo de Processador').CounterSamples.CookedValue
-
-        $ram = Get-CimInstance Win32_OperatingSystem
-        $ramTotal = $ram.TotalVisibleMemorySize
-        $ramLivre = $ram.FreePhysicalMemory
-        $ramUso = (($ramTotal - $ramLivre) / $ramTotal) * 100
-
-        $disco = (Get-Counter '\PhysicalDisk(_Total)\% Tempo de Disco').CounterSamples.CookedValue
-
-        $rede = Get-Counter '\Interface de rede(*)\Total de bytes/s'
-        $redeTotal = ($rede.CounterSamples | Measure-Object CookedValue -Sum).Sum
-
-        # Acumular
-        $cpuTotal += $cpu
-        $ramTotalUso += $ramUso
-        $discoTotal += $disco
-        $redeTotalGlobal += $redeTotal
-
-        Start-Sleep $intervalo
-        $tempoRestante -= $intervalo
-    }
-
-    # Promedios
-    $cpuMedia = [math]::Round($cpuTotal / $amostras, 2)
-    $ramMedia = [math]::Round($ramTotalUso / $amostras, 2)
-    $discoMedia = [math]::Round($discoTotal / $amostras, 2)
-    $redeMedia = [math]::Round($redeTotalGlobal / $amostras, 2)
-
-    Clear-Host
-    Write-Host "╔══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "║   RESULTADO MÉDIO ($minutos MINUTOS DE TESTE)        ║" -ForegroundColor Cyan
-    Write-Host "╚══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
-
-    Write-Host "`n🧠 Processador (CPU) : $cpuMedia %" -ForegroundColor Green
-    Write-Host "💾 Memória (RAM)     : $ramMedia %" -ForegroundColor Green
-    Write-Host "📀 Disco             : $discoMedia %" -ForegroundColor Green
-    Write-Host "🌐 Rede              : $redeMedia Bytes/s" -ForegroundColor Green
-
-    Write-Host "`n🔎 Avaliação:" -ForegroundColor Yellow
-
-    if ($cpuMedia -gt 85) { Write-Host "⚠ Uso alto de CPU" -ForegroundColor Red }
-    if ($ramMedia -gt 85) { Write-Host "⚠ Uso alto de memória" -ForegroundColor Red }
-    if ($discoMedia -gt 85) { Write-Host "⚠ Alto uso de disco" -ForegroundColor Red }
-
-    if ($cpuMedia -lt 85 -and $ramMedia -lt 85 -and $discoMedia -lt 85) {
-        Write-Host "✔ Sistema estável durante o teste" -ForegroundColor Green
-    }
-
-    Write-Host "`n✅ Diagnóstico finalizado" -ForegroundColor Green
-
-    # 🔹 Esperar cualquier tecla
-    Write-Host "`nPresione cualquier tecla para continuar..." -ForegroundColor Cyan
-    [void][System.Console]::ReadKey($true)
-}
-
-
-	   "3" {
-            Write-Host "`n🚀 Modo FULL en construcción..."
+        "3" {
+            Write-Host "🚀 Modo FULL próximamente..."
             Read-Host "ENTER..."
         }
 
         "4" {
-            Write-Host "`nSaindo..."
+            Write-Host "Saindo..."
         }
     }
 
