@@ -228,12 +228,107 @@ do {
             Read-Host "`nPressione ENTER para voltar..."
         }
 
-        "2" {
-            Write-Host "`n⚡ Sección de rendimiento en desarrollo..."
-            Read-Host "ENTER..."
+	   "2" {
+    Clear-Host
+    Write-Host "⚡ Diagnóstico de desempenho personalizado" -ForegroundColor Yellow
+
+    # 🔹 Preguntar duración en minutos
+    $minutos = Read-Host "`n⏱ ¿Cuántos minutos deseas ejecutar la prueba?"
+    
+    # Validar entrada
+    if (-not ($minutos -as [int]) -or $minutos -le 0) {
+        Write-Host "❌ Valor inválido. Se usarán 5 minutos por defecto." -ForegroundColor Red
+        $minutos = 5
+    }
+
+    $duracao = $minutos * 60
+    $intervalo = 1
+    $amostras = $duracao / $intervalo
+
+    Write-Host "`n👉 Execute seu programa de estresse AGORA..." -ForegroundColor Cyan
+    Start-Sleep 5
+
+    # 🔹 Mensaje de inicio real
+    Write-Host "`n🚀 Iniciando monitoreo de rendimiento..." -ForegroundColor Green
+    Start-Sleep 2
+
+    # Control de tiempo
+    $tempoRestante = $duracao
+    $ultimoAvisoMinuto = $minutos
+
+    # Acumuladores
+    $cpuTotal = 0
+    $ramTotalUso = 0
+    $discoTotal = 0
+    $redeTotalGlobal = 0
+
+    for ($i = 1; $i -le $amostras; $i++) {
+
+        # 🔹 Aviso cada minuto
+        $minutosRestantes = [math]::Ceiling($tempoRestante / 60)
+
+        if ($minutosRestantes -lt $ultimoAvisoMinuto -and $minutosRestantes -gt 0) {
+            Write-Host "⏳ Falta(n) $minutosRestantes minuto(s)..." -ForegroundColor Yellow
+            $ultimoAvisoMinuto = $minutosRestantes
         }
 
-        "3" {
+        $cpu = (Get-Counter '\Processador(_Total)\% Tempo de Processador').CounterSamples.CookedValue
+
+        $ram = Get-CimInstance Win32_OperatingSystem
+        $ramTotal = $ram.TotalVisibleMemorySize
+        $ramLivre = $ram.FreePhysicalMemory
+        $ramUso = (($ramTotal - $ramLivre) / $ramTotal) * 100
+
+        $disco = (Get-Counter '\PhysicalDisk(_Total)\% Tempo de Disco').CounterSamples.CookedValue
+
+        $rede = Get-Counter '\Interface de rede(*)\Total de bytes/s'
+        $redeTotal = ($rede.CounterSamples | Measure-Object CookedValue -Sum).Sum
+
+        # Acumular
+        $cpuTotal += $cpu
+        $ramTotalUso += $ramUso
+        $discoTotal += $disco
+        $redeTotalGlobal += $redeTotal
+
+        Start-Sleep $intervalo
+        $tempoRestante -= $intervalo
+    }
+
+    # Promedios
+    $cpuMedia = [math]::Round($cpuTotal / $amostras, 2)
+    $ramMedia = [math]::Round($ramTotalUso / $amostras, 2)
+    $discoMedia = [math]::Round($discoTotal / $amostras, 2)
+    $redeMedia = [math]::Round($redeTotalGlobal / $amostras, 2)
+
+    Clear-Host
+    Write-Host "╔══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+    Write-Host "║   RESULTADO MÉDIO ($minutos MINUTOS DE TESTE)        ║" -ForegroundColor Cyan
+    Write-Host "╚══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+
+    Write-Host "`n🧠 Processador (CPU) : $cpuMedia %" -ForegroundColor Green
+    Write-Host "💾 Memória (RAM)     : $ramMedia %" -ForegroundColor Green
+    Write-Host "📀 Disco             : $discoMedia %" -ForegroundColor Green
+    Write-Host "🌐 Rede              : $redeMedia Bytes/s" -ForegroundColor Green
+
+    Write-Host "`n🔎 Avaliação:" -ForegroundColor Yellow
+
+    if ($cpuMedia -gt 85) { Write-Host "⚠ Uso alto de CPU" -ForegroundColor Red }
+    if ($ramMedia -gt 85) { Write-Host "⚠ Uso alto de memória" -ForegroundColor Red }
+    if ($discoMedia -gt 85) { Write-Host "⚠ Alto uso de disco" -ForegroundColor Red }
+
+    if ($cpuMedia -lt 85 -and $ramMedia -lt 85 -and $discoMedia -lt 85) {
+        Write-Host "✔ Sistema estável durante o teste" -ForegroundColor Green
+    }
+
+    Write-Host "`n✅ Diagnóstico finalizado" -ForegroundColor Green
+
+    # 🔹 Esperar cualquier tecla
+    Write-Host "`nPresione cualquier tecla para continuar..." -ForegroundColor Cyan
+    [void][System.Console]::ReadKey($true)
+}
+
+
+	   "3" {
             Write-Host "`n🚀 Modo FULL en construcción..."
             Read-Host "ENTER..."
         }
